@@ -1,0 +1,16 @@
+# GrandA R8 STAGING — phase 1 (HTTP only, used to obtain the certificate).
+# Managed by deploy/r8-staging/r8_apply.sh. Affects ONLY server_name __DOMAIN__.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root __ACME_ROOT__;
+        default_type text/plain;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
