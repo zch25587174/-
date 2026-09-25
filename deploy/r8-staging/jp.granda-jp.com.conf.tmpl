@@ -1,12 +1,12 @@
-# GrandA R8 STAGING — jp.granda-jp.com -> R7 on 127.0.0.1:__R7_PORT__
-# Managed by deploy/r8-staging/r8_apply.sh. Affects ONLY server_name __DOMAIN__.
-# Does not touch any other vhost, global directive, or certificate.
+# GrandA R8 STAGING — __DOMAIN__ -> R7 on 127.0.0.1 (see granda-r8-proxy.inc)
+# Rendered by deploy/r8-staging/r8_apply.sh; do not edit on the server.
+# Affects ONLY server_name __DOMAIN__, plus a reject-only default sink on sockets that had
+# no listener at all. Never default_server for __DOMAIN__; never listen-level http2.
 
-limit_req_zone $binary_remote_addr zone=granda_r8_login:10m rate=10r/m;
+__SINKS__
 
 server {
-    listen 80;
-    listen [::]:80;
+    __LISTEN_HTTP__
     server_name __DOMAIN__;
 
     location ^~ /.well-known/acme-challenge/ {
@@ -18,10 +18,13 @@ server {
         return 301 https://$host$request_uri;
     }
 }
+# @@HTTPS_BEGIN
+
+__LOGIN_ZONE__
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    __LISTEN_HTTPS__
+    __HTTP2__
     server_name __DOMAIN__;
 
     ssl_certificate     __CERT_DIR__/fullchain.pem;
@@ -46,19 +49,16 @@ server {
         return 200 "User-agent: *\nDisallow: /\n";
     }
 
-    # Secrets, VCS metadata, backups, dumps, logs: never served.
+    # Secrets, VCS metadata, backups, dumps, logs: never served (lists live in r8_lib.sh).
     location ~ /\.(?!well-known/) { return 404; }
-    location ~* \.(env|sql|sqlite|sqlite3|db|dump|bak|backup|old|orig|swp|log|tar|tgz|gz|zip|7z|rar|ini|conf|pem|key)$ { return 404; }
-    location ~* ^/(backups?|dumps?|logs?|node_modules|storage/logs)(/|$) { return 404; }
+    location ~* \.(__BLOCKED_EXTS__)$ { return 404; }
+    location ~* ^/(__BLOCKED_DIRS__)(/|$) { return 404; }
 
-    # Brute-force protection on admin login (app-level limits still apply).
-    location ~* ^/admin/(login|auth|session) {
-        limit_req zone=granda_r8_login burst=5 nodelay;
-        limit_req_status 429;
-        include __PROXY_SNIPPET__;
-    }
+    # Admin login rate limit: only rendered when R7_ADMIN_LOGIN_PATH is supplied.
+    __LOGIN_LOCATION__
 
     location / {
         include __PROXY_SNIPPET__;
     }
 }
+# @@HTTPS_END
